@@ -3,3 +3,7 @@ version: "1.0"
 linter: jetbrains/qodana-python:2026.3
 profile:
   name: qodana.recommended
+# The run fails when the tests cover less than 90 % of the lines of the new code.
+failureConditions:
+  testCoverageThresholds:
+    fresh: 90
