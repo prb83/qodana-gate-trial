@@ -12,5 +12,3 @@ testpaths = ["tests"]
 source = ["."]
 omit = ["tests/*"]
 branch = true
-# Qodana needs paths relative to the project root.
-relative_files = true
