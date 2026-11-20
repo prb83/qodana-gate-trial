@@ -44,16 +44,23 @@ jobs:
       - name: Run the tests with coverage
         run: python -m coverage run -m pytest
 
-      - name: Write the coverage reports
+      # One report of one tool, in the directory that Qodana reads. The paths in it are relative
+      # to the project root (pyproject.toml, relative_files).
+      - name: Write the coverage report
         run: |
-          mkdir -p .qodana/code-coverage coverage
+          mkdir -p .qodana/code-coverage
           python -m coverage xml -o .qodana/code-coverage/coverage.xml
-          python -m coverage lcov -o coverage/lcov.info
-          python -m coverage report
+          python -m coverage report --show-missing
 
+      # The paid linter checks its licence with the project token. Only this step gets the token.
+      # Qodana runs in a container with the project at /data/project, so `args` names the
+      # coverage directory by its path there.
       - name: Run Qodana
         uses: JetBrains/qodana-action@v2026.3.1
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
+          args: --coverage-dir /data/project/.qodana/code-coverage
           pr-mode: true
           results-dir: ${{ runner.temp }}/qodana/results
           upload-result: true
@@ -125,15 +132,16 @@ jobs:
                 baselineSource: run.properties?.baselineSource ?? null,
                 coverageFilesProvided: run.properties?.["qodana.coverage.files.provided"] ?? null,
                 coverage: run.properties?.coverage ?? null,
+                failureConditions: run.properties?.qodanaFailureConditions ?? null,
                 results: Array.isArray(run.results) ? run.results.length : null,
               };
               console.log(file + ": " + JSON.stringify(facts));
             ' "$RESULTS/$file" "$HEAD_SHA"
           done
 
-      # The verdict. A free linter writes no coverage, so the run needs both opt-outs and passes or
-      # fails on Qodana's own result. The step ends with the exit code of the gate: 0 passed,
-      # 2 failed, 1 unavailable.
+      # The verdict. The paid linter writes the coverage of the new code in pull-request mode, so
+      # the gate checks it against its default minimum. Only complexity is not checked. The step
+      # ends with the exit code of the gate: 0 passed, 2 failed, 1 unavailable.
       - name: Run the gate
         if: ${{ !cancelled() }}
         env:
@@ -150,7 +158,6 @@ jobs:
           gate=("$RUNNER_TEMP/quality/gate/node_modules/.bin/factory-quality-gate"
             --analyser qodana
             --qodana-results "$RESULTS"
-            --without-coverage
             --without-complexity
             --commit "$HEAD_SHA"
             "${scope[@]}"
@@ -167,9 +174,10 @@ jobs:
           echo "gate exit code: $code"
           exit "$code"
 
-      # For the live checks only: runs with a missing opt-out, with the default commit, and with
-      # the directory of the first stage. They post no comment and never fail the job.
-      - name: Run the gate variants of the live checks
+      # For the trial checks only: Qodana's own result alone, the directory of the first stage, and
+      # the coverage minimum at and just above the value of the file. They post no comment and
+      # never fail the job.
+      - name: Run the gate variants of the trial checks
         if: ${{ !cancelled() }}
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -202,10 +210,31 @@ jobs:
             echo "gate exit code: $code"
             echo "::endgroup::"
           }
-          variant no-without-complexity --qodana-results "$RESULTS" --without-coverage --commit "$HEAD_SHA"
-          variant no-without-coverage --qodana-results "$RESULTS" --without-complexity --commit "$HEAD_SHA"
-          variant default-commit --qodana-results "$RESULTS" --without-coverage --without-complexity
-          variant start-directory --qodana-results "$RESULTS/start" --without-coverage --without-complexity --commit "$HEAD_SHA"
+          variant both-opt-outs --qodana-results "$RESULTS" --without-coverage --without-complexity --commit "$HEAD_SHA"
+          variant start-directory --qodana-results "$RESULTS/start" --without-complexity --commit "$HEAD_SHA"
+          # The line coverage of the new code as the gate computes it: covered lines by lines,
+          # rounded down to one decimal. Empty when the file has no usable counts.
+          value="$(node -e '
+            const fs = require("node:fs");
+            let coverage;
+            try {
+              coverage = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).runs?.[0]?.properties?.coverage;
+            } catch {
+              coverage = undefined;
+            }
+            const lines = coverage?.freshLines;
+            const covered = coverage?.freshCoveredLines;
+            const counts = [lines, covered].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0);
+            if (counts && lines > 0 && covered <= lines) {
+              console.log(Math.floor((covered * 1000) / lines) / 10);
+            }
+          ' "$RESULTS/qodana.sarif.json")"
+          echo "line coverage of the new code, from the two counts of the file: ${value:-none}"
+          if [ -n "$value" ]; then
+            above="$(node -e 'console.log((Number(process.argv[1]) + 0.1).toFixed(1))' "$value")"
+            variant minimum-at --qodana-results "$RESULTS" --without-complexity --commit "$HEAD_SHA" --coverage-minimum "$value"
+            variant minimum-above --qodana-results "$RESULTS" --without-complexity --commit "$HEAD_SHA" --coverage-minimum "$above"
+          fi
 
       - name: Keep the gate reports
         if: ${{ !cancelled() }}
@@ -215,12 +244,10 @@ jobs:
           path: ${{ runner.temp }}/quality/out
           if-no-files-found: warn
 
-      - name: Keep the coverage reports
+      - name: Keep the coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-reports
           include-hidden-files: true
-          path: |
-            .qodana/code-coverage/coverage.xml
-            coverage/lcov.info
+          path: .qodana/code-coverage/coverage.xml
