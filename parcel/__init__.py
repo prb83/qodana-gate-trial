@@ -1,0 +1,1 @@
+"""A small sample package."""

@@ -1,0 +1,68 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qodana:
+    name: Tests and Qodana
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - name: Check out the commit of the pull request
+        uses: actions/checkout@v5
+        with:
+          # The head commit, not the merge commit; the full history for the pull-request mode.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install the test tools
+        run: python -m pip install --quiet -r requirements-dev.txt
+
+      - name: Run the tests with coverage
+        run: python -m coverage run -m pytest
+
+      - name: Write the coverage reports
+        run: |
+          mkdir -p .qodana/code-coverage coverage
+          python -m coverage xml -o .qodana/code-coverage/coverage.xml
+          python -m coverage lcov -o coverage/lcov.info
+          python -m coverage report
+
+      - name: Run Qodana
+        uses: JetBrains/qodana-action@v2026.3.1
+        with:
+          pr-mode: true
+          results-dir: ${{ runner.temp }}/qodana/results
+          upload-result: true
+          artifact-name: qodana-results
+          use-caches: false
+          post-pr-comment: true
+
+      - name: Keep the coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          include-hidden-files: true
+          path: |
+            .qodana/code-coverage/coverage.xml
+            coverage/lcov.info

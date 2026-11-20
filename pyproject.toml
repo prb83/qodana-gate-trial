@@ -1,0 +1,16 @@
+[project]
+name = "qodana-gate-trial"
+version = "0.0.0"
+description = "A sample project for Qodana runs on pull requests"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*"]
+branch = true
+# Qodana needs paths relative to the project root.
+relative_files = true
