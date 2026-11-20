@@ -61,7 +61,8 @@ jobs:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
         with:
           args: --coverage-dir /data/project/.qodana/code-coverage
-          pr-mode: true
+          # A full run of the whole project, not the pull-request mode.
+          pr-mode: false
           results-dir: ${{ runner.temp }}/qodana/results
           upload-result: true
           artifact-name: qodana-results
