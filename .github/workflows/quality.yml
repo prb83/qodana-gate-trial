@@ -57,7 +57,7 @@ jobs:
       - name: Run Qodana
         uses: JetBrains/qodana-action@v2026.3.1
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_1193766820 }}
         with:
           pr-mode: true
           results-dir: ${{ runner.temp }}/qodana/results
@@ -240,7 +240,7 @@ jobs:
       - name: Collect the Qodana result files
         if: ${{ !cancelled() }}
         env:
-          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN_1193766820 }}
           RESULTS: ${{ runner.temp }}/qodana/results
         run: |
           keep="$RUNNER_TEMP/qodana/keep"
