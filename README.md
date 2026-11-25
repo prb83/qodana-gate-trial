@@ -12,3 +12,12 @@ python -m pip install -r requirements-dev.txt
 python -m coverage run -m pytest
 python -m coverage report
 ```
+
+## The coverage report for Qodana
+
+Qodana reads one coverage report from the directory `.qodana/code-coverage`.
+Write it after the tests:
+
+```sh
+python -m coverage xml -o .qodana/code-coverage/coverage.xml
+```
