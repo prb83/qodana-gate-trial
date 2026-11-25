@@ -1,5 +1,6 @@
 """Prices for sending a parcel."""
 
+# All prices are in euros. All weights are in kilograms.
 BASE_PRICE = 4.5
 PRICE_PER_KILOGRAM = 1.2
 EXPRESS_FACTOR = 1.5
